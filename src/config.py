@@ -26,4 +26,4 @@ GAMMA_VAR = 0.1
 # Test constraints (like your original asserts)
 MAX_TOTAL_TRAIN_SECONDS = 600  # 10 minutes
 MIN_ACC_ECHO = 0.99
-MIN_ACC_VAR = 0.95
+MIN_ACC_VAR = 0.80

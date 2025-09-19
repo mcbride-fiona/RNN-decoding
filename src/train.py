@@ -48,20 +48,9 @@ def train_variable_delay(model, dataloader, epochs: int = EPOCHS_VAR, lr: float 
     model.to(dev)
     model.train()
 
-    num_steps_per_epoch = len(dataloader)
-    total_steps = epochs * num_steps_per_epoch
-    warmup_steps = int(0.05 * total_steps)  # 5% warmup
-
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return float(step) / max(1, warmup_steps)
-        # cosine decay to 10% of base LR
-        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-        return 0.1 + 0.9 * 0.5 * (1 + torch.cos(torch.tensor(progress * 3.1415926535)))
-
     # AdamW tends to help here
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda s: lr_lambda(s).item() if hasattr(s, 'item') else lr_lambda(s))
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=STEP_SIZE_VAR, gamma=GAMMA_VAR)
     scaler = GradScaler(enabled=torch.cuda.is_available())
 
     criterion = nn.NLLLoss(reduction="none")

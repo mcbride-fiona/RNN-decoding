@@ -41,18 +41,14 @@ class GRUMemory(nn.Module):
 
 class VariableDelayGRUMemory(nn.Module):
     """
-    Variable-delay GRU with:
-      - learned delay embeddings (init h0 + concat every step),
-      - learned positional embeddings,
-      - explicit per-step 'emit gate' g_t = 1[t >= delay] concatenated to input,
-      - 2-layer GRU with dropout.
+    Variable-delay GRU with learned delay + positional embeddings (batch_first GRU).
+    - Delay emb initializes h0 and is concatenated at every step.
+    - Positional emb tells the model absolute time (0..T-1).
     """
     def __init__(self, hidden_size: int, max_delay: int,
                  delay_embed_dim: int = DELAY_EMBED_DIM,
                  pos_embed_dim: int = POS_EMBED_DIM,
-                 max_seq_len: int = 512,
-                 num_layers: int = 2,
-                 dropout: float = 0.2):
+                 max_seq_len: int = 512):
         super().__init__()
         self.hidden_size = hidden_size
         self.max_delay = max_delay
@@ -60,19 +56,13 @@ class VariableDelayGRUMemory(nn.Module):
         self.delay_emb = nn.Embedding(max_delay + 1, delay_embed_dim)
         self.pos_emb   = nn.Embedding(max_seq_len, pos_embed_dim)
 
-        # +1 for emit-gate feature
-        in_dim = (N + 1) + delay_embed_dim + pos_embed_dim + 1
-
-        self.gru = nn.GRU(
-            input_size=in_dim,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            dropout=dropout if num_layers > 1 else 0.0,
-            batch_first=True,
-        )
+        in_dim = (N + 1) + delay_embed_dim + pos_embed_dim
+        self.gru = nn.GRU(input_size=in_dim, hidden_size=hidden_size,
+                          num_layers=1, batch_first=True)
         self.decoder = nn.Linear(hidden_size, N + 1)
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
+        # project delay embedding to initial hidden state
         self.init_from_delay = nn.Sequential(
             nn.Linear(delay_embed_dim, hidden_size),
             nn.Tanh()
@@ -90,17 +80,14 @@ class VariableDelayGRUMemory(nn.Module):
         p = p.unsqueeze(0).expand(B, T, -1)                  # (B, T, Dp)
         d_time = d.unsqueeze(1).expand(B, T, -1)             # (B, T, Dd)
 
-        # Emit gate g_t = 1[t >= delay]
-        t_idx = torch.arange(T, device=device).unsqueeze(0).expand(B, T)  # (B,T)
-        g = (t_idx >= delays.unsqueeze(1)).float().unsqueeze(-1)          # (B,T,1)
+        x_cat = torch.cat([x, d_time, p], dim=-1)            # (B, T, in_dim)
 
-        x_cat = torch.cat([x, d_time, p, g], dim=-1)         # (B, T, in_dim)
-
+        # initial hidden state from delay emb: (num_layers=1, B, H)
         h0_delay = self.init_from_delay(d).unsqueeze(0)      # (1, B, H)
         if h0 is not None:
             h0_delay = h0
 
-        out, _ = self.gru(x_cat, h0_delay.repeat(self.gru.num_layers, 1, 1))  # (L=B,T,H)
+        out, _ = self.gru(x_cat, h0_delay)                   # (B, T, H)
         logits = self.decoder(out)                           # (B, T, N+1)
         return self.log_softmax(logits), None
 
