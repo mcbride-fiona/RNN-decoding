@@ -23,7 +23,7 @@ LR_VAR = 1e-2
 STEP_SIZE_VAR = 10
 GAMMA_VAR = 0.1
 
-# Test constraints (like your original asserts)
-MAX_TOTAL_TRAIN_SECONDS = 600  # 10 minutes
+# Test constraints
+MAX_TOTAL_TRAIN_SECONDS = 600 
 MIN_ACC_ECHO = 0.99
 MIN_ACC_VAR = 0.80
